@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gopal-ingress
+  namespace: gopal-app
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /api/a
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-a
+            port:
+              number: 80
+      - path: /api/b
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-b
+            port:
+              number: 80
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80

@@ -1,0 +1,105 @@
+name: Terraform Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'envs/**'
+      - 'modules/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'envs/**'
+      - 'modules/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.environment)) || fromJSON('["dev", "qa", "prod"]') }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      working-directory: ./envs/${{ matrix.environment }}
+      run: terraform init
+
+    - name: Terraform Format Check
+      working-directory: ./envs/${{ matrix.environment }}
+      run: terraform fmt -check
+      continue-on-error: true
+
+    - name: Terraform Validate
+      working-directory: ./envs/${{ matrix.environment }}
+      run: terraform validate
+
+    - name: Terraform Plan
+      working-directory: ./envs/${{ matrix.environment }}
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform plan -out=tfplan
+
+    - name: Terraform Apply
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/${{ matrix.environment }}
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform apply -auto-approve tfplan
+
+    - name: Terraform Destroy
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      working-directory: ./envs/${{ matrix.environment }}
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform destroy -auto-approve
+
+    - name: Output Terraform Values
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/${{ matrix.environment }}
+      run: terraform output -json > ${{ matrix.environment }}_outputs.json
+
+    - name: Upload Terraform Outputs
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.environment }}-terraform-outputs
+        path: ./envs/${{ matrix.environment }}/${{ matrix.environment }}_outputs.json
