@@ -1,0 +1,157 @@
+trigger: none  # Manual trigger only for infrastructure changes
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: TF_VERSION
+    value: '1.7.5'
+
+stages:
+  # Stage 1: Deploy Dev Infrastructure
+  - stage: terraform_dev
+    displayName: 'Terraform - Dev Environment'
+    jobs:
+      - job: terraform_dev_job
+        displayName: 'Apply Terraform - Dev'
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Init - Dev'
+            inputs:
+              azureSubscription: 'sc-azure-gopal'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                cd envs/dev
+                terraform init -input=false
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Plan - Dev'
+            inputs:
+              azureSubscription: 'sc-azure-gopal'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                cd envs/dev
+                terraform plan \
+                  -var="postgres_admin_password=$(POSTGRES_PASSWORD_DEV)" \
+                  -out=tfplan \
+                  -input=false
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Apply - Dev'
+            inputs:
+              azureSubscription: 'sc-azure-gopal'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                cd envs/dev
+                terraform apply -auto-approve tfplan
+
+  # Stage 2: Deploy QA Infrastructure (with manual approval)
+  - stage: terraform_qa
+    displayName: 'Terraform - QA Environment'
+    dependsOn: terraform_dev
+    condition: succeeded()
+    jobs:
+      - deployment: terraform_qa_approval
+        displayName: 'Manual Approval - QA Infrastructure'
+        environment: 'QA-Infrastructure'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: TerraformInstaller@0
+                  inputs:
+                    terraformVersion: $(TF_VERSION)
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Init - QA'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/qa
+                      terraform init -input=false
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Plan - QA'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/qa
+                      terraform plan \
+                        -var="postgres_admin_password=$(POSTGRES_PASSWORD_QA)" \
+                        -out=tfplan \
+                        -input=false
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Apply - QA'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/qa
+                      terraform apply -auto-approve tfplan
+
+  # Stage 3: Deploy Prod Infrastructure (with manual approval)
+  - stage: terraform_prod
+    displayName: 'Terraform - Prod Environment'
+    dependsOn: terraform_qa
+    condition: succeeded()
+    jobs:
+      - deployment: terraform_prod_approval
+        displayName: 'Manual Approval - Prod Infrastructure'
+        environment: 'Prod-Infrastructure'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: TerraformInstaller@0
+                  inputs:
+                    terraformVersion: $(TF_VERSION)
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Init - Prod'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/prod
+                      terraform init -input=false
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Plan - Prod'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/prod
+                      terraform plan \
+                        -var="postgres_admin_password=$(POSTGRES_PASSWORD_PROD)" \
+                        -out=tfplan \
+                        -input=false
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Apply - Prod'
+                  inputs:
+                    azureSubscription: 'sc-azure-gopal'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      cd envs/prod
+                      terraform apply -auto-approve tfplan
