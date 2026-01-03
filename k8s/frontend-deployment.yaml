@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ${ACR_LOGIN_SERVER}/frontend:v1
+        image: gopaldevacr.azurecr.io/frontend:dev-latest
         ports:
         - containerPort: 80
         resources:

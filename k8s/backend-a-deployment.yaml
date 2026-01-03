@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: backend-a
-        image: ${ACR_LOGIN_SERVER}/backend-a:${ENV}
+        image: gopaldevacr.azurecr.io/backend-a:dev-latest
         ports:
         - containerPort: 3000
         env:
@@ -33,13 +33,13 @@ spec:
         - name: SERVICE_NAME
           value: "backend-a"
         - name: DB_HOST
-          value: "${POSTGRES_FQDN}"
+          value: "gopalpgdev.postgres.database.azure.com"
         - name: DB_PORT
           value: "5432"
         - name: DB_NAME
-          value: "gopalapp${ENV}"
+          value: "gopalappdev"
         - name: DB_USER
-          value: "${POSTGRES_ADMIN_LOGIN}"
+          value: "gopalpgadmindev"
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
