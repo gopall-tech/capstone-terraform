@@ -33,11 +33,13 @@ on:
           - destroy
 
 jobs:
-  terraform:
+  terraform-dev:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.environment)) || fromJSON('["dev", "qa", "prod"]') }}
+    environment: dev
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
 
     steps:
     - name: Checkout code
@@ -54,20 +56,20 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Terraform Init
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       run: terraform init
 
     - name: Terraform Format Check
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       run: terraform fmt -check
       continue-on-error: true
 
     - name: Terraform Validate
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       run: terraform validate
 
     - name: Terraform Plan
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       env:
         TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
       run: terraform plan -out=tfplan
@@ -76,14 +78,14 @@ jobs:
       if: |
         (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       env:
         TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
       run: terraform apply -auto-approve tfplan
 
     - name: Terraform Destroy
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-      working-directory: ./envs/${{ matrix.environment }}
+      working-directory: ./envs/dev
       env:
         TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
       run: terraform destroy -auto-approve
@@ -92,8 +94,8 @@ jobs:
       if: |
         (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
-      working-directory: ./envs/${{ matrix.environment }}
-      run: terraform output -json > ${{ matrix.environment }}_outputs.json
+      working-directory: ./envs/dev
+      run: terraform output -json > dev_outputs.json
 
     - name: Upload Terraform Outputs
       if: |
@@ -101,5 +103,151 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.environment }}-terraform-outputs
-        path: ./envs/${{ matrix.environment }}/${{ matrix.environment }}_outputs.json
+        name: dev-terraform-outputs
+        path: ./envs/dev/dev_outputs.json
+
+  terraform-qa:
+    needs: terraform-dev
+    runs-on: ubuntu-latest
+    environment: qa
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'qa')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      working-directory: ./envs/qa
+      run: terraform init
+
+    - name: Terraform Format Check
+      working-directory: ./envs/qa
+      run: terraform fmt -check
+      continue-on-error: true
+
+    - name: Terraform Validate
+      working-directory: ./envs/qa
+      run: terraform validate
+
+    - name: Terraform Plan
+      working-directory: ./envs/qa
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform plan -out=tfplan
+
+    - name: Terraform Apply
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/qa
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform apply -auto-approve tfplan
+
+    - name: Terraform Destroy
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      working-directory: ./envs/qa
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform destroy -auto-approve
+
+    - name: Output Terraform Values
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/qa
+      run: terraform output -json > qa_outputs.json
+
+    - name: Upload Terraform Outputs
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      uses: actions/upload-artifact@v4
+      with:
+        name: qa-terraform-outputs
+        path: ./envs/qa/qa_outputs.json
+
+  terraform-prod:
+    needs: terraform-qa
+    runs-on: ubuntu-latest
+    environment: prod
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.0
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      working-directory: ./envs/prod
+      run: terraform init
+
+    - name: Terraform Format Check
+      working-directory: ./envs/prod
+      run: terraform fmt -check
+      continue-on-error: true
+
+    - name: Terraform Validate
+      working-directory: ./envs/prod
+      run: terraform validate
+
+    - name: Terraform Plan
+      working-directory: ./envs/prod
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform plan -out=tfplan
+
+    - name: Terraform Apply
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/prod
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform apply -auto-approve tfplan
+
+    - name: Terraform Destroy
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      working-directory: ./envs/prod
+      env:
+        TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      run: terraform destroy -auto-approve
+
+    - name: Output Terraform Values
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      working-directory: ./envs/prod
+      run: terraform output -json > prod_outputs.json
+
+    - name: Upload Terraform Outputs
+      if: |
+        (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      uses: actions/upload-artifact@v4
+      with:
+        name: prod-terraform-outputs
+        path: ./envs/prod/prod_outputs.json

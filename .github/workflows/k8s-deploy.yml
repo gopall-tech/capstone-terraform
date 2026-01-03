@@ -18,11 +18,12 @@ on:
           - prod
 
 jobs:
-  deploy:
+  deploy-dev:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', github.event.inputs.environment)) || fromJSON('["dev", "qa", "prod"]') }}
+    environment: dev
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
 
     steps:
     - name: Checkout code
@@ -30,22 +31,10 @@ jobs:
 
     - name: Set environment variables
       run: |
-        if [ "${{ matrix.environment }}" == "dev" ]; then
-          echo "ACR_NAME=gopaldevacr" >> $GITHUB_ENV
-          echo "RESOURCE_GROUP=rg-gopal-dev" >> $GITHUB_ENV
-          echo "AKS_CLUSTER=aks-gopal-dev" >> $GITHUB_ENV
-          echo "POSTGRES_FQDN=pg-gopal-dev.postgres.database.azure.com" >> $GITHUB_ENV
-        elif [ "${{ matrix.environment }}" == "qa" ]; then
-          echo "ACR_NAME=gopalqaacr" >> $GITHUB_ENV
-          echo "RESOURCE_GROUP=rg-gopal-qa" >> $GITHUB_ENV
-          echo "AKS_CLUSTER=aks-gopal-qa" >> $GITHUB_ENV
-          echo "POSTGRES_FQDN=pg-gopal-qa.postgres.database.azure.com" >> $GITHUB_ENV
-        else
-          echo "ACR_NAME=gopalprodacr" >> $GITHUB_ENV
-          echo "RESOURCE_GROUP=rg-gopal-prod" >> $GITHUB_ENV
-          echo "AKS_CLUSTER=aks-gopal-prod" >> $GITHUB_ENV
-          echo "POSTGRES_FQDN=pg-gopal-prod.postgres.database.azure.com" >> $GITHUB_ENV
-        fi
+        echo "ACR_NAME=gopaldevacr" >> $GITHUB_ENV
+        echo "RESOURCE_GROUP=rg-gopal-dev" >> $GITHUB_ENV
+        echo "AKS_CLUSTER=aks-gopal-dev" >> $GITHUB_ENV
+        echo "POSTGRES_FQDN=pg-gopal-dev.postgres.database.azure.com" >> $GITHUB_ENV
 
     - name: Azure Login
       uses: azure/login@v1
@@ -79,18 +68,192 @@ jobs:
       run: |
         cat k8s/backend-a-deployment.yaml | \
         sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
-        sed "s|\${ENV}|${{ matrix.environment }}-latest|g" | \
+        sed "s|\${ENV}|dev-latest|g" | \
         sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
-        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopal${{ matrix.environment }}admin|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopaldevadmin|g" | \
         kubectl apply -f -
 
     - name: Deploy Backend B
       run: |
         cat k8s/backend-b-deployment.yaml | \
         sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
-        sed "s|\${ENV}|${{ matrix.environment }}-latest|g" | \
+        sed "s|\${ENV}|dev-latest|g" | \
         sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
-        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopal${{ matrix.environment }}admin|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopaldevadmin|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Frontend
+      run: |
+        cat k8s/frontend-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Ingress
+      run: |
+        kubectl apply -f k8s/ingress.yaml
+
+    - name: Wait for deployments
+      run: |
+        kubectl rollout status deployment/backend-a -n gopal-app --timeout=5m
+        kubectl rollout status deployment/backend-b -n gopal-app --timeout=5m
+        kubectl rollout status deployment/frontend -n gopal-app --timeout=5m
+
+    - name: Get deployment status
+      run: |
+        kubectl get pods -n gopal-app
+        kubectl get svc -n gopal-app
+        kubectl get ingress -n gopal-app
+
+  deploy-qa:
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    environment: qa
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'qa')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set environment variables
+      run: |
+        echo "ACR_NAME=gopalqaacr" >> $GITHUB_ENV
+        echo "RESOURCE_GROUP=rg-gopal-qa" >> $GITHUB_ENV
+        echo "AKS_CLUSTER=aks-gopal-qa" >> $GITHUB_ENV
+        echo "POSTGRES_FQDN=pg-gopal-qa.postgres.database.azure.com" >> $GITHUB_ENV
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get ACR login server
+      run: |
+        ACR_LOGIN_SERVER=$(az acr show --name ${{ env.ACR_NAME }} --query loginServer --output tsv)
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER }} \
+          --overwrite-existing
+
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace gopal-app --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Create PostgreSQL secret
+      run: |
+        kubectl create secret generic postgres-secret \
+          --from-literal=password=${{ secrets.POSTGRES_ADMIN_PASSWORD }} \
+          -n gopal-app \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy Backend A
+      run: |
+        cat k8s/backend-a-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        sed "s|\${ENV}|qa-latest|g" | \
+        sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopalqaadmin|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Backend B
+      run: |
+        cat k8s/backend-b-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        sed "s|\${ENV}|qa-latest|g" | \
+        sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopalqaadmin|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Frontend
+      run: |
+        cat k8s/frontend-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Ingress
+      run: |
+        kubectl apply -f k8s/ingress.yaml
+
+    - name: Wait for deployments
+      run: |
+        kubectl rollout status deployment/backend-a -n gopal-app --timeout=5m
+        kubectl rollout status deployment/backend-b -n gopal-app --timeout=5m
+        kubectl rollout status deployment/frontend -n gopal-app --timeout=5m
+
+    - name: Get deployment status
+      run: |
+        kubectl get pods -n gopal-app
+        kubectl get svc -n gopal-app
+        kubectl get ingress -n gopal-app
+
+  deploy-prod:
+    needs: deploy-qa
+    runs-on: ubuntu-latest
+    environment: prod
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set environment variables
+      run: |
+        echo "ACR_NAME=gopalprodacr" >> $GITHUB_ENV
+        echo "RESOURCE_GROUP=rg-gopal-prod" >> $GITHUB_ENV
+        echo "AKS_CLUSTER=aks-gopal-prod" >> $GITHUB_ENV
+        echo "POSTGRES_FQDN=pg-gopal-prod.postgres.database.azure.com" >> $GITHUB_ENV
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get ACR login server
+      run: |
+        ACR_LOGIN_SERVER=$(az acr show --name ${{ env.ACR_NAME }} --query loginServer --output tsv)
+        echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> $GITHUB_ENV
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER }} \
+          --overwrite-existing
+
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace gopal-app --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Create PostgreSQL secret
+      run: |
+        kubectl create secret generic postgres-secret \
+          --from-literal=password=${{ secrets.POSTGRES_ADMIN_PASSWORD }} \
+          -n gopal-app \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy Backend A
+      run: |
+        cat k8s/backend-a-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        sed "s|\${ENV}|prod-latest|g" | \
+        sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopalprodadmin|g" | \
+        kubectl apply -f -
+
+    - name: Deploy Backend B
+      run: |
+        cat k8s/backend-b-deployment.yaml | \
+        sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
+        sed "s|\${ENV}|prod-latest|g" | \
+        sed "s|\${POSTGRES_FQDN}|${{ env.POSTGRES_FQDN }}|g" | \
+        sed "s|\${POSTGRES_ADMIN_LOGIN}|gopalprodadmin|g" | \
         kubectl apply -f -
 
     - name: Deploy Frontend
