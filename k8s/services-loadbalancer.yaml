@@ -1,0 +1,78 @@
+#==============================================================================
+# Backend Services - LoadBalancer Configuration
+#==============================================================================
+# These services expose the backend pods via Azure Load Balancer.
+# They are used by APIM to route traffic to the backend services.
+#
+# Security Note: In production, use Network Security Groups (NSGs) or
+# Azure Private Link to restrict access to only APIM.
+#==============================================================================
+
+---
+# Backend-A LoadBalancer Service
+# Exposes backend-a pods on a public IP for APIM routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-a-lb
+  namespace: gopal-app
+  labels:
+    app: backend-a
+  annotations:
+    # Optional: Add Azure-specific annotations for internal LB if using VNet integration
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: backend-a
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+
+---
+# Backend-B LoadBalancer Service
+# Exposes backend-b pods on a public IP for APIM routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-b-lb
+  namespace: gopal-app
+  labels:
+    app: backend-b
+  annotations:
+    # Optional: Add Azure-specific annotations for internal LB if using VNet integration
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: backend-b
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+
+---
+# Frontend LoadBalancer Service
+# Exposes frontend (React app served by nginx) for APIM routing
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-lb
+  namespace: gopal-app
+  labels:
+    app: frontend
+  annotations:
+    # Optional: Add Azure-specific annotations for internal LB if using VNet integration
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
