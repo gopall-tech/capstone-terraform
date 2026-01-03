@@ -1,0 +1,48 @@
+#==============================================================================
+# ArgoCD AppProject - Gopal Project
+#==============================================================================
+# Defines permissions and restrictions for the gopal-app applications.
+# This provides RBAC for what the application can access.
+#==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gopal-project
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Gopal Capstone Project
+
+  # Source repositories allowed
+  sourceRepos:
+    - https://github.com/gopall-tech/capstone-terraform.git
+    - https://github.com/gopall-tech/capstone-Backend.git
+    - https://github.com/gopall-tech/capstone-Frontend.git
+
+  # Destination clusters and namespaces allowed
+  destinations:
+    - namespace: gopal-app
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  # Cluster resources allowed to be managed
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'networking.k8s.io'
+      kind: Ingress
+
+  # Namespace-scoped resources allowed
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: 'apps'
+      kind: '*'
+    - group: 'networking.k8s.io'
+      kind: '*'
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true

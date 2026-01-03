@@ -1,0 +1,137 @@
+#==============================================================================
+# Kube-Prometheus-Stack Helm Values
+#==============================================================================
+# Optimized for Standard_B2s nodes (2 vCPU, 4GB RAM)
+# Includes: Prometheus, Grafana, Alertmanager, Node Exporter, Kube-State-Metrics
+#==============================================================================
+
+# Global settings
+fullnameOverride: prometheus
+
+#------------------------------------------------------------------------------
+# Prometheus Configuration
+#------------------------------------------------------------------------------
+prometheus:
+  prometheusSpec:
+    # Resource limits for small nodes
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Retention settings
+    retention: 7d
+    retentionSize: "5GB"
+
+    # Storage - use emptyDir for dev (no persistent storage needed)
+    storageSpec: {}
+
+    # Scrape interval
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    # Service monitor selector - monitor all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+#------------------------------------------------------------------------------
+# Grafana Configuration
+#------------------------------------------------------------------------------
+grafana:
+  enabled: true
+
+  # Admin credentials
+  adminUser: admin
+  adminPassword: GrafanaAdmin123!
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Service type - LoadBalancer for external access
+  service:
+    type: LoadBalancer
+    port: 80
+
+  # Default dashboards
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: utc
+
+  # Data sources will be auto-configured
+  sidecar:
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+
+#------------------------------------------------------------------------------
+# Alertmanager Configuration
+#------------------------------------------------------------------------------
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+    storage: {}
+
+#------------------------------------------------------------------------------
+# Node Exporter - Hardware/OS metrics
+#------------------------------------------------------------------------------
+nodeExporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+#------------------------------------------------------------------------------
+# Kube-State-Metrics - Kubernetes object metrics
+#------------------------------------------------------------------------------
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+#------------------------------------------------------------------------------
+# Prometheus Operator
+#------------------------------------------------------------------------------
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+#------------------------------------------------------------------------------
+# Disable components not needed for dev
+#------------------------------------------------------------------------------
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

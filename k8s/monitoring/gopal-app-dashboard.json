@@ -1,0 +1,222 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "gopal-app-monitoring",
+    "title": "Gopal App Monitoring",
+    "tags": ["gopal", "kubernetes", "application"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 2,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Backend-A CPU Usage",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"gopal-app\", pod=~\"backend-a.*\"}[5m])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Backend-B CPU Usage",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"gopal-app\", pod=~\"backend-b.*\"}[5m])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Backend-A Memory Usage",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"gopal-app\", pod=~\"backend-a.*\"}) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Backend-B Memory Usage",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"gopal-app\", pod=~\"backend-b.*\"}) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Pod Status - gopal-app",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 16, "w": 8, "h": 4 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{namespace=\"gopal-app\", phase=\"Running\"} == 1)",
+            "legendFormat": "Running Pods",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 2 },
+                { "color": "green", "value": 4 }
+              ]
+            }
+          }
+        },
+        "options": { "colorMode": "value", "graphMode": "none" }
+      },
+      {
+        "id": 6,
+        "title": "Container Restarts",
+        "type": "stat",
+        "gridPos": { "x": 8, "y": 16, "w": 8, "h": 4 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"gopal-app\"})",
+            "legendFormat": "Total Restarts",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "red", "value": 10 }
+              ]
+            }
+          }
+        },
+        "options": { "colorMode": "value", "graphMode": "none" }
+      },
+      {
+        "id": 7,
+        "title": "Network Traffic (Received)",
+        "type": "timeseries",
+        "gridPos": { "x": 16, "y": 16, "w": 8, "h": 4 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [
+          {
+            "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"gopal-app\"}[5m])) by (pod)",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps",
+            "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20 }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Backend-A Logs",
+        "type": "logs",
+        "gridPos": { "x": 0, "y": 20, "w": 12, "h": 10 },
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "targets": [
+          {
+            "expr": "{app=\"backend-a\"}",
+            "queryType": "range",
+            "refId": "A",
+            "editorMode": "code"
+          }
+        ],
+        "options": {
+          "showTime": true,
+          "showLabels": false,
+          "showCommonLabels": false,
+          "wrapLogMessage": true,
+          "prettifyLogMessage": false,
+          "enableLogDetails": true,
+          "sortOrder": "Descending"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Backend-B Logs",
+        "type": "logs",
+        "gridPos": { "x": 12, "y": 20, "w": 12, "h": 10 },
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "targets": [
+          {
+            "expr": "{app=\"backend-b\"}",
+            "queryType": "range",
+            "refId": "A",
+            "editorMode": "code"
+          }
+        ],
+        "options": {
+          "showTime": true,
+          "showLabels": false,
+          "showCommonLabels": false,
+          "wrapLogMessage": true,
+          "prettifyLogMessage": false,
+          "enableLogDetails": true,
+          "sortOrder": "Descending"
+        }
+      }
+    ]
+  },
+  "folderId": 0,
+  "overwrite": true
+}

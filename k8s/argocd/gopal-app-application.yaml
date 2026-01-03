@@ -1,0 +1,58 @@
+#==============================================================================
+# ArgoCD Application - Gopal App
+#==============================================================================
+# This Application resource tells ArgoCD to:
+# 1. Watch the capstone-terraform GitHub repo
+# 2. Deploy K8s manifests from k8s/ directory
+# 3. Sync changes automatically to the gopal-app namespace
+#
+# GitOps Flow:
+#   Developer pushes to GitHub -> ArgoCD detects change -> Auto-syncs to cluster
+#==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gopal-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Project - using default project
+  project: default
+
+  # Source - where to pull manifests from
+  source:
+    repoURL: https://github.com/gopall-tech/capstone-terraform.git
+    targetRevision: main
+    path: k8s
+
+    # Only include deployment manifests (exclude monitoring, argocd configs)
+    directory:
+      recurse: false
+      include: '*.yaml'
+      exclude: 'monitoring/*|argocd/*'
+
+  # Destination - where to deploy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gopal-app
+
+  # Sync Policy - automatic sync with self-healing
+  syncPolicy:
+    automated:
+      prune: true        # Delete resources removed from Git
+      selfHeal: true     # Revert manual changes in cluster
+      allowEmpty: false  # Don't sync if no manifests found
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health checks
+  revisionHistoryLimit: 10

@@ -1,0 +1,75 @@
+#==============================================================================
+# ServiceMonitors for Backend Services
+#==============================================================================
+# These ServiceMonitors tell Prometheus to scrape metrics from your
+# backend-a and backend-b services in the gopal-app namespace.
+#
+# Note: Your Node.js backends need to expose a /metrics endpoint.
+# This can be added using the 'prom-client' npm package.
+#==============================================================================
+
+---
+# ServiceMonitor for Backend-A
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-a-monitor
+  namespace: monitoring
+  labels:
+    app: backend-a
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: backend-a
+  namespaceSelector:
+    matchNames:
+      - gopal-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+
+---
+# ServiceMonitor for Backend-B
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-b-monitor
+  namespace: monitoring
+  labels:
+    app: backend-b
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: backend-b
+  namespaceSelector:
+    matchNames:
+      - gopal-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+
+---
+# ServiceMonitor for Frontend (nginx metrics if enabled)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: frontend-monitor
+  namespace: monitoring
+  labels:
+    app: frontend
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  namespaceSelector:
+    matchNames:
+      - gopal-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

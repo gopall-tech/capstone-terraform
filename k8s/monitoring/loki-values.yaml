@@ -1,0 +1,127 @@
+#==============================================================================
+# Loki Stack Helm Values
+#==============================================================================
+# Loki for log aggregation + Promtail for log collection
+# Optimized for Standard_B2s nodes (2 vCPU, 4GB RAM)
+#==============================================================================
+
+#------------------------------------------------------------------------------
+# Loki Configuration
+#------------------------------------------------------------------------------
+loki:
+  enabled: true
+
+  # Resource limits for small nodes
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Storage configuration - filesystem for dev
+  persistence:
+    enabled: false
+
+  # Loki configuration
+  config:
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+
+    ingester:
+      lifecycler:
+        ring:
+          kvstore:
+            store: inmemory
+          replication_factor: 1
+      chunk_idle_period: 5m
+      chunk_retain_period: 30s
+
+    schema_config:
+      configs:
+        - from: 2020-05-15
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /data/loki/index
+        cache_location: /data/loki/cache
+        shared_store: filesystem
+      filesystem:
+        directory: /data/loki/chunks
+
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      max_entries_limit_per_query: 5000
+
+    chunk_store_config:
+      max_look_back_period: 168h
+
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 168h
+
+#------------------------------------------------------------------------------
+# Promtail Configuration - Log collector (runs on every node)
+#------------------------------------------------------------------------------
+promtail:
+  enabled: true
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+  config:
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+
+    positions:
+      filename: /run/promtail/positions.yaml
+
+    scrape_configs:
+      # Scrape logs from all pods
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_pod_node_name
+            target_label: __host__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_namespace
+            target_label: namespace
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_name
+            target_label: pod
+          - action: replace
+            source_labels:
+              - __meta_kubernetes_pod_container_name
+            target_label: container
+
+#------------------------------------------------------------------------------
+# Grafana - disabled (using existing from prometheus stack)
+#------------------------------------------------------------------------------
+grafana:
+  enabled: false
+
+  # Note: If enabling Grafana from loki-stack, ensure only one datasource
+  # is marked as default to avoid conflicts with prometheus-grafana
