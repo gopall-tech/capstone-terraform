@@ -104,6 +104,66 @@ jobs:
         kubectl get svc -n gopal-app
         kubectl get ingress -n gopal-app
 
+    - name: Get LoadBalancer endpoints for security scanning
+      id: endpoints
+      run: |
+        echo "Waiting for LoadBalancer IPs..."
+        sleep 10
+        BACKEND_A_IP=$(kubectl get svc backend-a-lb -n gopal-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        BACKEND_B_IP=$(kubectl get svc backend-b-lb -n gopal-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        FRONTEND_IP=$(kubectl get svc frontend-lb -n gopal-app -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+        echo "backend_a_ip=$BACKEND_A_IP" >> $GITHUB_OUTPUT
+        echo "backend_b_ip=$BACKEND_B_IP" >> $GITHUB_OUTPUT
+        echo "frontend_ip=$FRONTEND_IP" >> $GITHUB_OUTPUT
+
+    - name: Run OWASP ZAP baseline security scan
+      if: steps.endpoints.outputs.backend_a_ip != ''
+      continue-on-error: true
+      run: |
+        mkdir -p zap-reports
+
+        docker run --rm -v $(pwd)/zap-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py \
+          -t http://${{ steps.endpoints.outputs.backend_a_ip }} \
+          -r backend-a-report.html \
+          -J backend-a-report.json || true
+
+        docker run --rm -v $(pwd)/zap-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py \
+          -t http://${{ steps.endpoints.outputs.backend_b_ip }} \
+          -r backend-b-report.html \
+          -J backend-b-report.json || true
+
+        docker run --rm -v $(pwd)/zap-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py \
+          -t http://${{ steps.endpoints.outputs.frontend_ip }} \
+          -r frontend-report.html \
+          -J frontend-report.json || true
+
+    - name: Upload ZAP security reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: owasp-zap-dev-reports
+        path: zap-reports/
+        retention-days: 30
+
+    - name: Create security scan summary
+      if: always()
+      run: |
+        echo "## 🔒 OWASP ZAP Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Scanned Endpoints:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend-A: http://${{ steps.endpoints.outputs.backend_a_ip }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend-B: http://${{ steps.endpoints.outputs.backend_b_ip }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: http://${{ steps.endpoints.outputs.frontend_ip }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📊 View detailed reports in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+
   deploy-qa:
     needs: deploy-dev
     runs-on: ubuntu-latest
