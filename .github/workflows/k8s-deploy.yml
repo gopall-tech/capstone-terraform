@@ -88,9 +88,9 @@ jobs:
         sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
         kubectl apply -f -
 
-    - name: Deploy Ingress
+    - name: Deploy LoadBalancer Services
       run: |
-        kubectl apply -f k8s/ingress.yaml
+        kubectl apply -f k8s/services-loadbalancer.yaml
 
     - name: Wait for deployments
       run: |
@@ -235,9 +235,9 @@ jobs:
         sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
         kubectl apply -f -
 
-    - name: Deploy Ingress
+    - name: Deploy LoadBalancer Services
       run: |
-        kubectl apply -f k8s/ingress.yaml
+        kubectl apply -f k8s/services-loadbalancer.yaml
 
     - name: Wait for deployments
       run: |
@@ -322,9 +322,9 @@ jobs:
         sed "s|\${ACR_LOGIN_SERVER}|${{ env.ACR_LOGIN_SERVER }}|g" | \
         kubectl apply -f -
 
-    - name: Deploy Ingress
+    - name: Deploy LoadBalancer Services
       run: |
-        kubectl apply -f k8s/ingress.yaml
+        kubectl apply -f k8s/services-loadbalancer.yaml
 
     - name: Wait for deployments
       run: |
