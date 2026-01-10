@@ -1,3 +1,4 @@
+# Frontend deployment for gopal-app
 apiVersion: apps/v1
 kind: Deployment
 metadata:
